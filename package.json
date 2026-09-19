@@ -1,6 +1,6 @@
 {
   "name": "sellerchamp-inventory-checker",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "private": true,
   "description": "Fast mobile-friendly inventory location mover for SellerChamp",
   "main": "server.js",

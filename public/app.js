@@ -1,13 +1,15 @@
 const $=id=>document.getElementById(id);
-let currentProduct=null,pendingQtyLocationIndex=null,lastShelf='';
+let currentProduct=null,pendingQtyLocationIndex=null,lastShelf='',lastShelfData=null;
 const state={pin:localStorage.getItem('sc_pin')||''};
+let shelfChecks={};
+try{shelfChecks=JSON.parse(localStorage.getItem('sc_shelf_checks_v1')||'{}')||{}}catch{shelfChecks={}}
 
 function escapeHtml(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 function toast(msg,type=''){const t=$('toast');t.textContent=msg;t.className='toast '+type;t.classList.remove('hidden');clearTimeout(toast._t);toast._t=setTimeout(()=>t.classList.add('hidden'),3500);}
 function busy(btn,on,label){if(!btn)return; if(on){btn.dataset.old=btn.textContent;btn.textContent=label;btn.disabled=true}else{btn.textContent=btn.dataset.old||btn.textContent;btn.disabled=false}}
 async function api(url,opts={}){opts.cache='no-store';opts.headers={...(opts.headers||{}),'Content-Type':'application/json','Cache-Control':'no-cache'};if(state.pin)opts.headers['X-App-Pin']=state.pin;const r=await fetch(url,opts);let d={};try{d=await r.json()}catch{}if(!r.ok)throw new Error(d.error||d.details||`HTTP ${r.status}`);return d;}
 
-async function checkStatus(){try{const d=await api('/api/status?fresh='+Date.now());$('connection').textContent='SellerChamp connected';$('connection').className='status ok';$('appVersion').textContent='v'+(d.version||'1.3.0');$('pinCard').classList.add('hidden')}catch(e){$('connection').textContent=e.message.includes('PIN')?'PIN required':'Not connected';$('connection').className='status bad';if(e.message.includes('PIN'))$('pinCard').classList.remove('hidden')}}
+async function checkStatus(){try{const d=await api('/api/status?fresh='+Date.now());$('connection').textContent='SellerChamp connected';$('connection').className='status ok';$('appVersion').textContent='v'+(d.version||'1.4.0');$('pinCard').classList.add('hidden')}catch(e){$('connection').textContent=e.message.includes('PIN')?'PIN required':'Not connected';$('connection').className='status bad';if(e.message.includes('PIN'))$('pinCard').classList.remove('hidden')}}
 $('savePin').onclick=()=>{state.pin=$('pin').value.trim();localStorage.setItem('sc_pin',state.pin);checkStatus()};
 
 function showPanel(which){
@@ -26,21 +28,37 @@ async function checkShelf(){
 $('shelfBtn').onclick=checkShelf;$('shelfLookup').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();checkShelf()}});
 $('refreshShelf').onclick=()=>{if(lastShelf){$('shelfLookup').value=lastShelf;checkShelf()}};
 
+function shelfCheckKey(location,x){return `${String(location||'').trim().toLowerCase()}|${x.source||''}|${x.manifest_id||''}|${x.master_product_id||''}|${x.batch_listing_id||''}|${x.sku||''}`}
+function saveShelfChecks(){localStorage.setItem('sc_shelf_checks_v1',JSON.stringify(shelfChecks))}
+$('clearShelfChecks').onclick=()=>{
+ const prefix=String(lastShelf||'').trim().toLowerCase()+'|';
+ Object.keys(shelfChecks).forEach(key=>{if(key.startsWith(prefix))delete shelfChecks[key]});
+ saveShelfChecks();if(lastShelfData)renderShelf(lastShelfData);
+};
+
 function renderShelf(d){
- $('shelfReport').classList.remove('hidden');$('shelfName').textContent=d.location;
+ lastShelfData=d;$('shelfReport').classList.remove('hidden');$('shelfName').textContent=d.location;
  const warnings=Array.isArray(d.warnings)?d.warnings:[],warningBox=$('shelfWarnings');
  warningBox.classList.toggle('hidden',!warnings.length);
  warningBox.innerHTML=warnings.map(x=>`<div>${escapeHtml(x)}</div>`).join('');
  $('shelfStats').innerHTML=`<div><strong>${d.items.length}</strong><span>records</span></div><div><strong>${d.expected_quantity}</strong><span>expected qty</span></div><div><strong>${d.not_submitted_count}</strong><span>not submitted</span></div>`;
  const box=$('shelfItems');
  if(!d.items.length){box.innerHTML='<div class="location-empty">No SellerChamp inventory was found for this shelf.</div>';return}
- box.innerHTML=d.items.map((x,i)=>`<button class="shelf-item" data-index="${i}">
-   ${x.image?`<img src="${escapeHtml(x.image)}" alt="">`:''}
-   <span class="shelf-item-main"><span class="shelf-sku">${escapeHtml(x.sku||'No SKU')}</span><span class="shelf-title">${escapeHtml(x.title||'Untitled item')}</span>
-   <span class="shelf-meta">Qty ${Number(x.quantity||0)}${Number(x.reserve_quantity||0)?` • Reserve ${Number(x.reserve_quantity)}`:''}</span></span>
-   ${x.submitted?'<span class="badge submitted">SUBMITTED</span>':'<span class="badge not-submitted">NOT SUBMITTED</span>'}
- </button>`).join('');
- box.querySelectorAll('.shelf-item').forEach(btn=>btn.onclick=()=>{
+ box.innerHTML=d.items.map((x,i)=>{const key=shelfCheckKey(d.location,x),checked=!!shelfChecks[key];return `<div class="shelf-item${checked?' shelf-complete':''}" data-key="${escapeHtml(key)}">
+   <label class="shelf-check"><input class="shelf-check-input" type="checkbox" ${checked?'checked':''} aria-label="Mark ${escapeHtml(x.sku||'item')} checked"><span></span></label>
+   <button class="shelf-open" data-index="${i}">
+    ${x.image?`<img src="${escapeHtml(x.image)}" alt="">`:''}
+    <span class="shelf-item-main"><span class="shelf-sku">${escapeHtml(x.sku||'No SKU')}</span><span class="shelf-title">${escapeHtml(x.title||'Untitled item')}</span>
+    <span class="shelf-meta">Qty ${Number(x.quantity||0)}${Number(x.reserve_quantity||0)?` • Reserve ${Number(x.reserve_quantity)}`:''}</span></span>
+    ${x.submitted?'<span class="badge submitted">SUBMITTED</span>':'<span class="badge not-submitted">NOT SUBMITTED</span>'}
+   </button>
+ </div>`}).join('');
+ box.querySelectorAll('.shelf-check-input').forEach(input=>input.onchange=()=>{
+   const row=input.closest('.shelf-item'),key=row.dataset.key;
+   if(input.checked)shelfChecks[key]=true;else delete shelfChecks[key];
+   row.classList.toggle('shelf-complete',input.checked);saveShelfChecks();
+ });
+ box.querySelectorAll('.shelf-open').forEach(btn=>btn.onclick=()=>{
    const x=d.items[Number(btn.dataset.index)];showPanel('item');$('lookup').value=x.sku||'';findItem();
  });
 }

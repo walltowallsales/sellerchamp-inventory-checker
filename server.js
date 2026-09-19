@@ -5,7 +5,7 @@ const path = require('path');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const APP_VERSION = '1.3.0';
+const APP_VERSION = '1.4.0';
 const TOKEN = process.env.SELLERCHAMP_TOKEN || '';
 const APP_PIN = process.env.APP_PIN || '';
 const SC_BASE = 'https://app.sellerchamp.com';

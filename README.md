@@ -1,4 +1,4 @@
-# SellerChamp Inventory Checker v1.3.0
+# SellerChamp Inventory Checker v1.4.0
 
 A separate app branched from Location Mover v2.30. The Location Mover project is unchanged.
 
@@ -18,3 +18,5 @@ Shelf Check uses SellerChamp's catalog location-items endpoint for submitted inv
 V1.2 prevents one failed SellerChamp source from cancelling the entire shelf report and disables browser caching so the displayed version updates immediately after a Render deployment.
 
 V1.3 paces SellerChamp requests, automatically retries HTTP 429 responses with increasing delays, limits Batch scanning to current/recent Batches, and briefly caches completed Batch shelf results.
+
+V1.4 adds persistent Shelf Check checkboxes, a completed-item highlight, and a Clear Checks control so a shelf can be verified item by item.
