@@ -5,9 +5,9 @@ const state={pin:localStorage.getItem('sc_pin')||''};
 function escapeHtml(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 function toast(msg,type=''){const t=$('toast');t.textContent=msg;t.className='toast '+type;t.classList.remove('hidden');clearTimeout(toast._t);toast._t=setTimeout(()=>t.classList.add('hidden'),3500);}
 function busy(btn,on,label){if(!btn)return; if(on){btn.dataset.old=btn.textContent;btn.textContent=label;btn.disabled=true}else{btn.textContent=btn.dataset.old||btn.textContent;btn.disabled=false}}
-async function api(url,opts={}){opts.headers={...(opts.headers||{}),'Content-Type':'application/json'};if(state.pin)opts.headers['X-App-Pin']=state.pin;const r=await fetch(url,opts);let d={};try{d=await r.json()}catch{}if(!r.ok)throw new Error(d.error||d.details||`HTTP ${r.status}`);return d;}
+async function api(url,opts={}){opts.cache='no-store';opts.headers={...(opts.headers||{}),'Content-Type':'application/json','Cache-Control':'no-cache'};if(state.pin)opts.headers['X-App-Pin']=state.pin;const r=await fetch(url,opts);let d={};try{d=await r.json()}catch{}if(!r.ok)throw new Error(d.error||d.details||`HTTP ${r.status}`);return d;}
 
-async function checkStatus(){try{const d=await api('/api/status');$('connection').textContent='SellerChamp connected';$('connection').className='status ok';$('appVersion').textContent='v'+(d.version||'1.0.0');$('pinCard').classList.add('hidden')}catch(e){$('connection').textContent=e.message.includes('PIN')?'PIN required':'Not connected';$('connection').className='status bad';if(e.message.includes('PIN'))$('pinCard').classList.remove('hidden')}}
+async function checkStatus(){try{const d=await api('/api/status?fresh='+Date.now());$('connection').textContent='SellerChamp connected';$('connection').className='status ok';$('appVersion').textContent='v'+(d.version||'1.2.0');$('pinCard').classList.add('hidden')}catch(e){$('connection').textContent=e.message.includes('PIN')?'PIN required':'Not connected';$('connection').className='status bad';if(e.message.includes('PIN'))$('pinCard').classList.remove('hidden')}}
 $('savePin').onclick=()=>{state.pin=$('pin').value.trim();localStorage.setItem('sc_pin',state.pin);checkStatus()};
 
 function showPanel(which){
@@ -28,6 +28,9 @@ $('refreshShelf').onclick=()=>{if(lastShelf){$('shelfLookup').value=lastShelf;ch
 
 function renderShelf(d){
  $('shelfReport').classList.remove('hidden');$('shelfName').textContent=d.location;
+ const warnings=Array.isArray(d.warnings)?d.warnings:[],warningBox=$('shelfWarnings');
+ warningBox.classList.toggle('hidden',!warnings.length);
+ warningBox.innerHTML=warnings.map(x=>`<div>${escapeHtml(x)}</div>`).join('');
  $('shelfStats').innerHTML=`<div><strong>${d.items.length}</strong><span>records</span></div><div><strong>${d.expected_quantity}</strong><span>expected qty</span></div><div><strong>${d.not_submitted_count}</strong><span>not submitted</span></div>`;
  const box=$('shelfItems');
  if(!d.items.length){box.innerHTML='<div class="location-empty">No SellerChamp inventory was found for this shelf.</div>';return}

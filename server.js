@@ -5,12 +5,19 @@ const path = require('path');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const APP_VERSION = '1.2.0';
 const TOKEN = process.env.SELLERCHAMP_TOKEN || '';
 const APP_PIN = process.env.APP_PIN || '';
 const SC_BASE = 'https://app.sellerchamp.com';
 
 app.use(express.json({ limit: '200kb' }));
-app.use(express.static(path.join(__dirname, 'public')));
+app.use((req,res,next)=>{
+  res.set('Cache-Control','no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.set('Pragma','no-cache');
+  res.set('Expires','0');
+  next();
+});
+app.use(express.static(path.join(__dirname, 'public'),{etag:false,maxAge:0}));
 
 function assertConfigured(req, res, next) {
   if (!TOKEN) return res.status(503).json({ error: 'SELLERCHAMP_TOKEN is not configured on the server.' });
@@ -495,10 +502,22 @@ app.get('/api/shelf-report', async (req,res)=>{
   try{
     // Submitted inventory and Batch inventory are independent sources, so run
     // them together to reduce shelf-report wait time.
-    const [submitted,unsubmitted]=await Promise.all([
+    const [submittedResult,unsubmittedResult]=await Promise.allSettled([
       getSubmittedShelfItems(location),
       getUnsubmittedShelfItems(location)
     ]);
+
+    const submitted=submittedResult.status==='fulfilled'?submittedResult.value:[];
+    const unsubmitted=unsubmittedResult.status==='fulfilled'?unsubmittedResult.value:[];
+    const warnings=[];
+    if(submittedResult.status==='rejected'){
+      console.error('Shelf Check submitted inventory failed:',submittedResult.reason);
+      warnings.push('Submitted Products inventory could not be checked.');
+    }
+    if(unsubmittedResult.status==='rejected'){
+      console.error('Shelf Check Batch inventory failed:',unsubmittedResult.reason);
+      warnings.push('Not-yet-submitted Batch inventory could not be checked.');
+    }
 
     // If an unsubmitted listing has the same SKU as submitted inventory, keep
     // both records: physically they may represent separate expected units.
@@ -511,7 +530,8 @@ app.get('/api/shelf-report', async (req,res)=>{
       submitted_count:submitted.length,
       not_submitted_count:unsubmitted.length,
       expected_quantity:items.reduce((n,x)=>n+Number(x.quantity||0),0),
-      items
+      items,
+      warnings
     });
   }catch(e){
     res.status(e.status||500).json({error:'Could not build shelf report.',details:e.data||e.message});
@@ -521,7 +541,7 @@ app.get('/api/shelf-report', async (req,res)=>{
 app.get('/api/status', async (req, res) => {
   try {
     const data = await scFetch('/api/marketplace_accounts');
-    res.json({ ok: true, version: '1.0.0', pinRequired: !!APP_PIN, accounts: (data.marketplace_accounts || []).map(a => ({ id: a.id, name: a.name, marketplace: a.marketplace })) });
+    res.json({ ok: true, version: APP_VERSION, pinRequired: !!APP_PIN, accounts: (data.marketplace_accounts || []).map(a => ({ id: a.id, name: a.name, marketplace: a.marketplace })) });
   } catch (e) {
     res.status(e.status || 500).json({ error: 'Could not connect to SellerChamp.', details: e.data || e.message });
   }
@@ -814,4 +834,4 @@ app.get('/api/locations', async (req, res) => {
 
 app.use((req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
 
-app.listen(PORT, () => console.log(`SellerChamp Location Mover running on port ${PORT}`));
+app.listen(PORT, () => console.log(`SellerChamp Inventory Checker v${APP_VERSION} running on port ${PORT}`));
