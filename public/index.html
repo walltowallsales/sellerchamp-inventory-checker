@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#111827">
+<title>SellerChamp Inventory Checker</title>
+<link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<main class="shell">
+<header>
+  <div><div class="eyebrow">Stuff2Sell warehouse tool</div><h1>Inventory Checker</h1><div id="appVersion" class="version">v1.0.0</div></div>
+  <div id="connection" class="status neutral">Checking…</div>
+</header>
+
+<section id="pinCard" class="card hidden">
+<label for="pin">App PIN</label><div class="row"><input id="pin" type="password" inputmode="numeric" autocomplete="off"><button id="savePin">Unlock</button></div>
+</section>
+
+<nav class="mode-tabs">
+<button id="shelfTab" class="tab active">Shelf Check</button>
+<button id="itemTab" class="tab">Item Check</button>
+</nav>
+
+<section id="shelfPanel">
+  <section class="card">
+    <label for="shelfLookup">1. Scan shelf / location</label>
+    <div class="scan-row"><input id="shelfLookup" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="Example: C0513"><button id="shelfBtn">Check Shelf</button></div>
+    <div class="hint">Shows submitted Products inventory plus not-yet-submitted Batch inventory expected at this shelf.</div>
+  </section>
+  <section id="shelfReport" class="card hidden">
+    <div class="report-head"><div><div class="eyebrow">Shelf report</div><h2 id="shelfName"></h2></div><button id="refreshShelf" class="secondary">Refresh</button></div>
+    <div id="shelfStats" class="stats"></div>
+    <div id="shelfItems" class="shelf-items"></div>
+  </section>
+</section>
+
+<section id="itemPanel" class="hidden">
+  <section class="card">
+    <label for="lookup">1. Scan item SKU / barcode</label>
+    <div class="scan-row"><input id="lookup" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="SKU, UPC, ASIN…"><button id="findBtn">Find Item</button></div>
+  </section>
+
+  <section id="productCard" class="card hidden">
+    <div class="product-head"><img id="productImage" class="product-img hidden" alt="Product"><div><div id="sku" class="sku"></div><h2 id="title"></h2><div id="itemStatus" class="item-status"></div></div></div>
+    <div class="sellerchamp-links"><button id="openProductBtn" class="sc-link">SellerChamp Product</button><button id="openBatchBtn" class="sc-link secondary-link">SellerChamp Batch</button></div>
+    <div class="inventory-summary"><div class="inventory-heading">Current locations & quantities</div><div id="allLocations" class="location-list"></div></div>
+    <div id="productActions">
+      <label for="fromLocation">Move from location</label><select id="fromLocation"></select><div id="sourceQty" class="quantity-line"></div>
+      <label for="toLocation">New Location</label><input id="toLocation" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="Example: C0514">
+      <label class="check"><input id="moveAll" type="checkbox" checked> Move all quantity from this location</label>
+      <div id="partialQtyWrap" class="hidden"><label for="moveQty">Quantity to move</label><input id="moveQty" type="number" min="1" step="1" inputmode="numeric"></div>
+      <button id="moveBtn" class="move">MOVE ITEM</button>
+    </div>
+    <button id="clearBtn" class="ghost">Clear / Next Item</button>
+  </section>
+</section>
+
+<div id="qtyModal" class="modal hidden"><div class="modal-card"><h2>Update Quantity</h2><div id="qtyModalLocation" class="confirm-text"></div><label for="qtyModalInput">New total quantity</label><input id="qtyModalInput" type="number" inputmode="numeric" pattern="[0-9]*" min="0" step="1"><div class="qty-modal-actions"><button id="qtyModalCancel" class="secondary">Cancel</button><button id="qtyModalSave" class="move">Update Quantity</button></div></div></div>
+<div id="moveConfirm" class="modal hidden"><div class="modal-card"><h2>Move Complete</h2><div id="confirmText" class="confirm-text"></div><button id="confirmOk" class="move">OK</button></div></div>
+<div id="toast" class="toast hidden"></div>
+</main>
+<script src="/app.js"></script>
+</body></html>

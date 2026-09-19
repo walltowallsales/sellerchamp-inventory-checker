@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: sellerchamp-location-mover
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: SELLERCHAMP_TOKEN
+        sync: false
+      - key: APP_PIN
+        sync: false
