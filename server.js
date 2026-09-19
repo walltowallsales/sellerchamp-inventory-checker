@@ -5,7 +5,7 @@ const path = require('path');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const APP_VERSION = '1.2.0';
+const APP_VERSION = '1.3.0';
 const TOKEN = process.env.SELLERCHAMP_TOKEN || '';
 const APP_PIN = process.env.APP_PIN || '';
 const SC_BASE = 'https://app.sellerchamp.com';
@@ -33,27 +33,53 @@ function checkPin(req, res, next) {
 
 app.use('/api', assertConfigured, checkPin);
 
+const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
+let scRequestGate = Promise.resolve();
+let lastScRequestAt = 0;
+
 async function scFetch(endpoint, options = {}) {
-  const response = await fetch(`${SC_BASE}${endpoint}`, {
-    ...options,
-    headers: {
-      'Token': TOKEN,
-      'Content-Type': 'application/json',
-      ...(options.headers || {})
+  // SellerChamp rate-limits rapid inventory requests. Serialize calls and keep
+  // them at least 1.1 seconds apart so a shelf scan does not flood the API.
+  const previous = scRequestGate;
+  let releaseGate;
+  scRequestGate = new Promise(resolve => { releaseGate = resolve; });
+  await previous;
+
+  try {
+    for (let attempt = 0; attempt <= 4; attempt++) {
+      const spacing = Math.max(0, 1100 - (Date.now() - lastScRequestAt));
+      if (spacing) await wait(spacing);
+
+      const response = await fetch(`${SC_BASE}${endpoint}`, {
+        ...options,
+        headers: {
+          'Token': TOKEN,
+          'Content-Type': 'application/json',
+          ...(options.headers || {})
+        }
+      });
+      lastScRequestAt = Date.now();
+
+      const text = await response.text();
+      let data = null;
+      try { data = text ? JSON.parse(text) : {}; } catch { data = { raw: text }; }
+
+      if (response.status === 429 && attempt < 4) {
+        const retryAfter = Number(response.headers.get('retry-after') || 0) * 1000;
+        await wait(Math.max(retryAfter, 2500 * (attempt + 1)));
+        continue;
+      }
+      if (!response.ok) {
+        const err = new Error(`SellerChamp returned ${response.status}`);
+        err.status = response.status;
+        err.data = data;
+        throw err;
+      }
+      return data;
     }
-  });
-
-  const text = await response.text();
-  let data = null;
-  try { data = text ? JSON.parse(text) : {}; } catch { data = { raw: text }; }
-
-  if (!response.ok) {
-    const err = new Error(`SellerChamp returned ${response.status}`);
-    err.status = response.status;
-    err.data = data;
-    throw err;
+  } finally {
+    releaseGate();
   }
-  return data;
 }
 
 const CHANGE_LOG_URL = 'https://script.google.com/macros/s/AKfycbw2UHYXOzZajklEXvHf-o5Ht1f6P6e4ifmzWVsRdbyUnVisv-23SUxRrlVr6QMgJk5ZpA/exec';
@@ -441,28 +467,34 @@ async function getSubmittedShelfItems(location) {
   return items;
 }
 
+const shelfBatchCache = new Map();
+
 async function getUnsubmittedShelfItems(location) {
   const needle=String(location||'').trim().toLowerCase();
+  const cached=shelfBatchCache.get(needle);
+  if(cached && Date.now()-cached.savedAt<120000)return cached.items;
   const found=[];
   const seen=new Set();
-  const pageSize=100;
+  let data;
+  try{ data=await scFetch('/api/manifests?page=1&page_size=50'); }
+  catch(e){ if([400,404,422].includes(e.status)) return []; throw e; }
 
-  for(let page=1;page<=10;page++){
-    let data;
-    try{ data=await scFetch(`/api/manifests?page=${page}&page_size=${pageSize}`); }
-    catch(e){ if([400,404].includes(e.status)) break; throw e; }
+  let manifests=data.manifests||data.manifest||[];
+  if(!Array.isArray(manifests)) manifests=manifests?[manifests]:[];
+  // Not-yet-submitted inventory should live in current Batches. Skipping
+  // completed/history Batches prevents hundreds of unnecessary API calls.
+  manifests=manifests.filter(manifest=>{
+    const status=String(manifest?.status||'').trim().toLowerCase();
+    return !/(submitted|completed|complete|closed|archived|processed|cancelled|canceled)/.test(status);
+  }).slice(0,30);
 
-    let manifests=data.manifests||data.manifest||[];
-    if(!Array.isArray(manifests)) manifests=manifests?[manifests]:[];
-    if(!manifests.length) break;
-
-    for(const manifest of manifests){
+  for(const manifest of manifests){
       if(!manifest?.id)continue;
-      for(let lp=1;lp<=20;lp++){
+      for(let lp=1;lp<=5;lp++){
         let listingData;
         try{
           listingData=await scFetch(`/api/manifests/${encodeURIComponent(manifest.id)}/product_listings?page=${lp}&page_size=100`);
-        }catch(e){ if([400,404].includes(e.status))break; throw e; }
+        }catch(e){ if([400,404,422].includes(e.status))break; throw e; }
         let rows=listingData.product_listings||listingData.product_listing||[];
         if(!Array.isArray(rows))rows=rows?[rows]:[];
         for(const x of rows){
@@ -490,9 +522,8 @@ async function getUnsubmittedShelfItems(location) {
         }
         if(rows.length<100)break;
       }
-    }
-    if(manifests.length<pageSize)break;
   }
+  shelfBatchCache.set(needle,{savedAt:Date.now(),items:found});
   return found;
 }
 
