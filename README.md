@@ -1,4 +1,4 @@
-# SellerChamp Inventory Checker v1.4.0
+# SellerChamp Inventory Checker v1.5.0
 
 A separate app branched from Location Mover v2.30. The Location Mover project is unchanged.
 
@@ -20,3 +20,5 @@ V1.2 prevents one failed SellerChamp source from cancelling the entire shelf rep
 V1.3 paces SellerChamp requests, automatically retries HTTP 429 responses with increasing delays, limits Batch scanning to current/recent Batches, and briefly caches completed Batch shelf results.
 
 V1.4 adds persistent Shelf Check checkboxes, a completed-item highlight, and a Clear Checks control so a shelf can be verified item by item.
+
+V1.5 keeps the Inventory Checker title on one responsive line to reduce header height on iPhone.
